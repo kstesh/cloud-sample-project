@@ -1,8 +1,24 @@
+# Build stage
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /src
 
-FROM mcr.microsoft.com/dotnet/sdk:6.0
+COPY SampleWebApiAspNetCore/SampleWebApiAspNetCore.csproj SampleWebApiAspNetCore/
+RUN dotnet restore SampleWebApiAspNetCore/SampleWebApiAspNetCore.csproj
+
+COPY SampleWebApiAspNetCore/ SampleWebApiAspNetCore/
+RUN dotnet publish SampleWebApiAspNetCore/SampleWebApiAspNetCore.csproj \
+    -c Release \
+    -o /app/publish \
+    --no-restore
+
+# Runtime stage
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 WORKDIR /app
-COPY . .
-RUN dotnet restore && dotnet publish -c Release -o out
-WORKDIR /app/out
+
+COPY --from=build /app/publish .
+
+ENV ASPNETCORE_URLS=http://+:5000
+ENV ASPNETCORE_ENVIRONMENT=Development
 EXPOSE 5000
-ENTRYPOINT ["dotnet", "ASPNETCore-WebAPI-Sample.dll"]
+
+ENTRYPOINT ["dotnet", "SampleWebApiAspNetCore.dll"]
