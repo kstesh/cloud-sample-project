@@ -40,16 +40,33 @@ resource "google_artifact_registry_repository" "webapi" {
   depends_on    = [google_project_service.apis]
 }
 
-resource "google_project_iam_member" "cloudbuild_run_admin" {
-  project = var.project_id
-  role    = "roles/run.admin"
-  member  = "serviceAccount:${local.cloudbuild_sa}"
+resource "google_service_account" "cloudbuild_trigger" {
+  account_id   = "cloudbuild-deploy"
+  display_name = "Cloud Build deploy SA for ${var.service_name}"
 }
 
-resource "google_project_iam_member" "cloudbuild_sa_user" {
+resource "google_project_iam_member" "trigger_sa_run_admin" {
+  project = var.project_id
+  role    = "roles/run.admin"
+  member  = "serviceAccount:${google_service_account.cloudbuild_trigger.email}"
+}
+
+resource "google_project_iam_member" "trigger_sa_act_as" {
   project = var.project_id
   role    = "roles/iam.serviceAccountUser"
-  member  = "serviceAccount:${local.cloudbuild_sa}"
+  member  = "serviceAccount:${google_service_account.cloudbuild_trigger.email}"
+}
+
+resource "google_project_iam_member" "trigger_sa_artifact_writer" {
+  project = var.project_id
+  role    = "roles/artifactregistry.writer"
+  member  = "serviceAccount:${google_service_account.cloudbuild_trigger.email}"
+}
+
+resource "google_project_iam_member" "trigger_sa_logs_writer" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.cloudbuild_trigger.email}"
 }
 
 resource "google_secret_manager_secret" "github_pat" {
@@ -94,11 +111,11 @@ resource "google_cloudbuildv2_repository" "repo" {
   remote_uri        = "https://github.com/${var.github_owner}/${var.github_repo}.git"
 }
 
-
 resource "google_cloudbuild_trigger" "deploy" {
-  name     = "${var.service_name}-deploy"
-  location = var.region
-  filename = "cloudbuild.yaml"
+  name            = "${var.service_name}-deploy"
+  location        = var.region
+  filename        = "cloudbuild.yaml"
+  service_account = google_service_account.cloudbuild_trigger.id
 
   repository_event_config {
     repository = google_cloudbuildv2_repository.repo.id
@@ -113,5 +130,11 @@ resource "google_cloudbuild_trigger" "deploy" {
     _SERVICE = var.service_name
   }
 
-  depends_on = [google_project_service.apis]
+  depends_on = [
+    google_project_iam_member.trigger_sa_run_admin,
+    google_project_iam_member.trigger_sa_act_as,
+    google_project_iam_member.trigger_sa_artifact_writer,
+    google_project_iam_member.trigger_sa_logs_writer,
+  ]
+}
 }
