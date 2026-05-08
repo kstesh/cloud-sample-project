@@ -137,4 +137,3 @@ resource "google_cloudbuild_trigger" "deploy" {
     google_project_iam_member.trigger_sa_logs_writer,
   ]
 }
-}
